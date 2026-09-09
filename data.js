@@ -15,6 +15,8 @@ export const AEROSPACE_ACTIONS = ["refresh"];
 export const WIDGETS = [
   "battery",
   "browser-track",
+  "now-playing",
+  "airpods",
   "cpu",
   "crypto",
   "date-display",
