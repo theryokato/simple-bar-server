@@ -21,13 +21,27 @@ export default function missiveAction(req, res, clients, action) {
     return;
   }
 
+  const MAX_BODY_SIZE = 64 * 1024;
   let body = "";
+  let size = 0;
+  let tooLarge = false;
 
   req.on("data", (chunk) => {
+    size += chunk.length;
+    if (size > MAX_BODY_SIZE) {
+      tooLarge = true;
+      return;
+    }
     body += chunk;
   });
 
   req.on("end", () => {
+    if (tooLarge) {
+      res.statusCode = 413;
+      res.end("Payload too large.");
+      return;
+    }
+
     try {
       const json = JSON.parse(body);
       if (!json.content) {
@@ -43,6 +57,8 @@ export default function missiveAction(req, res, clients, action) {
           client.send(JSON.stringify({ action, data: json }));
         }
       }
+
+      res.end();
     } catch (error) {
       res.statusCode = 400;
       res.end("Invalid JSON.");

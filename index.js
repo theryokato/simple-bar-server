@@ -16,7 +16,9 @@ wssServer.listen(config.ports.ws, "127.0.0.1");
 const wss = new WebSocketServer({ server: wssServer });
 
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "text/plain" });
+  // setHeader (not writeHead) so services can still set an error status
+  // before the response ends; writeHead(200, ...) would commit it immediately.
+  res.setHeader("Content-Type", "text/plain");
 
   const url = new URL(req.url, "http://localhost");
   const urlSegments = url.pathname.split("/").slice(1);
@@ -52,7 +54,11 @@ const server = http.createServer((req, res) => {
   }
 
   if (realm === "missive") {
+    // missiveAction answers asynchronously once the request body has been
+    // fully consumed, so it must own res.end() — closing the response here
+    // would commit a 200 before any status check can run.
     missiveAction(req, res, wss.clients, kind);
+    return;
   }
 
   res.end();
@@ -67,6 +73,23 @@ server.on("listening", () => {
 });
 
 wss.on("connection", (ws, req) => {
+  // Browsers attached an http(s) Origin; only allow loopback origins so a
+  // random webpage cannot open a socket and receive pushed data. Non-browser
+  // local clients (curl, scripts, Übersicht's file:// webview with a null
+  // origin) send no http origin and are unaffected.
+  if (req.headers.origin?.startsWith("http")) {
+    try {
+      const { hostname } = new URL(req.headers.origin);
+      if (!["localhost", "127.0.0.1", "[::1]"].includes(hostname)) {
+        ws.close();
+        return;
+      }
+    } catch {
+      ws.close();
+      return;
+    }
+  }
+
   const url = new URL(req.url, "http://localhost");
   const target = url.searchParams.get("target");
   const userWidgetIndex = url.searchParams.get("userWidgetIndex");
